@@ -1,25 +1,39 @@
 # Freight Rate Prediction Challenge
 
-See `Freight_Rate_ML_Assessment.pdf` for the assessment instructions.
+## Clone the project
 
-## What to do
-
-1. Train and validate your model using `data/train_test.csv`.
-2. Predict every load in `data/validation.csv`. Each load has a unique `load_id`.
-3. Fill the matching `predicted_rate` values in `data/validation_predictions_template.csv` and save it as `validation_predictions.csv`.
-4. Predict every row in `data/december_chart_inputs.csv` by filling its `predicted_rate` column.
-5. Install the scorer requirements and run:
+```bash 
+git clone https://github.com/Uzairkheshgi/freight-rate-prediction
+```
+## Setup
 
 ```bash
+python -m venv .venv && source .venv/bin/activate
 python -m pip install -r requirements.txt
-python score.py --predictions validation_predictions.csv --december-predictions data/december_chart_inputs.csv
 ```
 
-The scorer validates both files and creates `scorer_results/candidate_december.png`.
+## Run the scrip
 
-## Submit
+```bash
+python train.py
+```
 
-- GitHub repository containing your code, dependencies, and run instructions
-- `validation_predictions.csv`
-- PDF or DOCX report containing your validation, data split approach and `candidate_december.png`
-- 2-3 minute Loom link
+Trains on `data/train_test.csv`, prints the holdout score, then writes
+`validation_predictions.csv` and fills the `predicted_rate` column of
+`data/december_chart_inputs.csv`. Takes about a minute. 
+
+## Run score.py
+To produce the chart run below command.
+
+```bash
+python score.py --predictions validation_predictions.csv --december-predictions 
+```
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `eda/eda.ipynb` | Exploration, data-quality findings and the feature benchmarks.|
+| `data_cleaning.py` | Loading, cleaning, feature building, the time split. Imported, not run for its side effects. |
+| `train.py` | Trains the model and writes both prediction files. |
+| `score.py` | To produce the chart. |
