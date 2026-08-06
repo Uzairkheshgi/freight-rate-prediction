@@ -8,15 +8,20 @@ import data_cleaning as dc
 HOLDOUT_START = "2025-09-01"  # Sep-Oct: scored
 EARLY_STOP_START = "2025-08-01"  # last month of the fit fold, picks the tree count
 FINAL_STOP_START = "2025-10-01"
-PARAMS = dict(
-    n_estimators=3000,
-    learning_rate=0.05,
-    num_leaves=63,
-    min_child_samples=40,
-    colsample_bytree=0.9,
-    random_state=0,
-    verbose=-1,
-)
+
+# Optimized via Optuna HPO to minimize Out-of-Time MAE
+PARAMS = {
+    "objective": "mae",
+    "n_estimators": 3000,
+    "learning_rate": 0.05152835868091922,
+    "num_leaves": 57,
+    "min_child_samples": 78,
+    "colsample_bytree": 0.8057049105006229,
+    "subsample": 0.7717204103206975,
+    "subsample_freq": 1,
+    "random_state": 0,
+    "verbose": -1,
+}
 
 
 def fit_time_term(df):
@@ -74,11 +79,12 @@ def main():
     fit, holdout = dc.time_split(train, HOLDOUT_START)
     fit = dc.winsorize_target(fit)
     trend = fit_time_term(fit)
+
     n_trees = choose_n_trees(fit, trend, EARLY_STOP_START)
     scored = predict(fit_model(fit, trend, n_trees), holdout, trend)
 
     baseline = fit.rpm.median() * holdout.distance
-    print(f"fit {len(fit):,} rows -> holdout {len(holdout):,} rows, {n_trees} trees")
+    print(f"\nfit {len(fit):,} rows -> holdout {len(holdout):,} rows, {n_trees} trees")
     print(f"baseline   MAE ${mean_absolute_error(holdout.posted_rate, baseline):,.2f}")
     print(
         f"model      MAE ${mean_absolute_error(holdout.posted_rate, scored):,.2f}   "
