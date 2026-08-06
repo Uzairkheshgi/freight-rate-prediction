@@ -6,8 +6,10 @@ from sklearn.metrics import mean_absolute_error
 import data_cleaning as dc
 
 HOLDOUT_START = "2025-09-01"  # Sep-Oct: scored
+EARLY_STOP_START = "2025-08-01"  # last month of the fit fold, picks the tree count
+FINAL_STOP_START = "2025-10-01"
 PARAMS = dict(
-    n_estimators=300,
+    n_estimators=3000,
     learning_rate=0.05,
     num_leaves=63,
     min_child_samples=40,
@@ -35,9 +37,23 @@ def residual_target(df, time_term):
     return np.log(df.posted_rate) - time_term(df.days_elapsed)
 
 
-def fit_model(df, time_term):
-    """Fit the features against the detrended target."""
+def choose_n_trees(df, time_term, cutoff):
+    """Early-stop on the last month of the fold being fitted, leaving the holdout untouched."""
+    inner, stopping = dc.time_split(df, cutoff)
     model = lgb.LGBMRegressor(**PARAMS)
+    model.fit(
+        inner[dc.FEATURES],
+        residual_target(inner, time_term),
+        eval_X=stopping[dc.FEATURES],
+        eval_y=residual_target(stopping, time_term),
+        callbacks=[lgb.early_stopping(50, verbose=False)],
+    )
+    return model.best_iteration_
+
+
+def fit_model(df, time_term, n_trees):
+    """Fit the features against the detrended target."""
+    model = lgb.LGBMRegressor(**{**PARAMS, "n_estimators": n_trees})
     model.fit(df[dc.FEATURES], residual_target(df, time_term))
     return model
 
@@ -58,10 +74,11 @@ def main():
     fit, holdout = dc.time_split(train, HOLDOUT_START)
     fit = dc.winsorize_target(fit)
     trend = fit_time_term(fit)
-    scored = predict(fit_model(fit, trend), holdout, trend)
+    n_trees = choose_n_trees(fit, trend, EARLY_STOP_START)
+    scored = predict(fit_model(fit, trend, n_trees), holdout, trend)
 
     baseline = fit.rpm.median() * holdout.distance
-    print(f"fit {len(fit):,} rows -> holdout {len(holdout):,} rows")
+    print(f"fit {len(fit):,} rows -> holdout {len(holdout):,} rows, {n_trees} trees")
     print(f"baseline   MAE ${mean_absolute_error(holdout.posted_rate, baseline):,.2f}")
     print(
         f"model      MAE ${mean_absolute_error(holdout.posted_rate, scored):,.2f}   "
@@ -71,7 +88,7 @@ def main():
     # Refit on everything for December - Sep and Oct are the months closest to December.
     full = dc.winsorize_target(train)
     trend = fit_time_term(full)
-    model = fit_model(full, trend)
+    model = fit_model(full, trend, choose_n_trees(full, trend, FINAL_STOP_START))
 
     template = pd.read_csv(dc.DATA_DIR / "validation_predictions_template.csv")
     valid = dc.prepare(dc.load("validation.csv"))
